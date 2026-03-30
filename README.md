@@ -23,9 +23,18 @@ Use **environment variables** or a **`.env`** file in the process working direct
 | Variable | Role |
 |----------|------|
 | `GRAFANA_CLOUD_URL` | Loki host or full `.../loki/api/v1/push` (optional; defaults match Grafana Cloud) |
-| `GRAFANA_CLOUD_USER` | Basic-auth username: stack / tenant id |
+| `GRAFANA_CLOUD_USER` | Basic-auth **username**: numeric tenant / stack / “Loki user” id (not your email) |
 | `GRAFANA_CLOUD_WRITE_API_KEY` | Basic-auth password: Loki **write** API token |
 | `GRAFANA_CLOUD_API_KEY` | Legacy alias for the write token |
+
+**Where to find `GRAFANA_CLOUD_URL` and `GRAFANA_CLOUD_USER`**
+
+1. Sign in to [Grafana Cloud](https://grafana.com/), pick your stack in the **GRAFANA CLOUD** sidebar.
+2. On **Manage stack**, open the **Loki** card → **Details** or **Send logs**. That page shows the Loki **URL** (often `https://logs-prod-…grafana.net` with push path `/loki/api/v1/push`) — use the host or full URL for `GRAFANA_CLOUD_URL`.
+3. The same screen (or the “Send logs” / client setup snippet) shows the **User** value for HTTP Basic auth — put that number/string in `GRAFANA_CLOUD_USER`.
+
+You can also open the stack’s **hosted logs** page in the browser:  
+`https://grafana.com/orgs/<your-org>/hosted-logs/<id>` — the `<id>` in the path is usually the **same** value as `GRAFANA_CLOUD_USER`. Example: [`…/hosted-logs/1529533`](https://grafana.com/orgs/taixingbi/hosted-logs/1529533) → user `1529533`.
 
 Copy [`env.example`](env.example) and replace placeholders:
 
