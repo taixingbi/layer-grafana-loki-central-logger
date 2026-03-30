@@ -1,181 +1,131 @@
-# tb-loki-central-logger
+# tb-loki-central-logger — developer reference
 
-## Install
-
-```bash
-pip install tb-loki-central-logger
-```
-
-## Hello World test
-
-Spin up Loki locally first:
-
-```bash
-# From the loki-logging/ docker-compose project
-docker compose up -d loki
-
-# Then run the test
-python hello_world_test.py
-```
-
-Open Grafana at **https://logs-prod-036.grafana.net** and query:
-
-```logql
-{service="hello-world-test"}
-```
+User-facing quickstart lives in [README.md](README.md). This page is **setup details**, **API tables**, and **release** notes.
 
 ---
 
-## API Reference
+## Smoke test (Grafana Cloud)
 
-### `tb_loki_central_logger.configure(url, labels, timeout)`
+1. Copy [`env.example`](env.example) to `.env` and set `GRAFANA_CLOUD_WRITE_API_KEY` (and user/URL if needed).
+2. Run:
 
-Configure the module-level default client. Call once at startup.
+```bash
+python test.py
+```
 
-| Param | Type | Default | Description |
-|-------|------|---------|-------------|
-| `url` | str | `https://logs-prod-036.grafana.net` | Loki base URL |
-| `labels` | dict | `{}` | Static labels on every log line |
-| `timeout` | int | `5` | HTTP timeout in seconds |
+3. In **Grafana Cloud → Explore → Loki**, query by label, for example:
 
-### `push_log(message, level, labels)`
+```logql
+{service="my-app"}
+```
 
-Push a single log line.
+Adjust labels to match what you pass into `LokiHandler` / `configure`.
+
+## Environment variables
+
+Loaded from `.env` in the **current working directory** on import when keys are not already set in the process environment. See [README.md](README.md#configuration) and `config.py` for names and defaults.
+
+---
+
+## API reference
+
+### `configure(url=None, labels=None, timeout=5, basic_auth=None)`
+
+Sets the module-level client used by `push_log` / `push_logs`. Call once at startup.
+
+Omit `url` and `basic_auth` to use `GRAFANA_CLOUD_*` (or `.env`).  
+`labels` become defaults on every line.
+
+### `push_log(message, level="info", labels=None)`
+
+Single line through the default client.
 
 ```python
+from tb_loki_central_logger import push_log
+
 push_log("Hello", level="info", labels={"request_id": "abc123"})
 ```
 
 ### `push_logs(entries)`
 
-Push a batch of `(message, level)` tuples in one HTTP request.
+One HTTP request with many lines. `entries` is a list of `(message, level)` strings.
 
 ```python
+from tb_loki_central_logger import push_logs
+
 push_logs([
-    ("Started",       "info"),
+    ("Started", "info"),
     ("Config loaded", "info"),
-    ("Cache miss",    "warn"),
+    ("Cache miss", "warn"),
 ])
 ```
 
-### `LokiHandler(url, labels, timeout, queue_size)`
+### `LokiClient(url=None, labels=None, timeout=5, basic_auth=None)`
 
-Drop-in `logging.Handler`. Ships records asynchronously in a background thread — never blocks your app.
-
-| Param | Type | Default | Description |
-|-------|------|---------|-------------|
-| `url` | str | `https://logs-prod-036.grafana.net` | Loki base URL |
-| `labels` | dict | `{}` | Static labels added to every record |
-| `timeout` | int | `5` | HTTP timeout in seconds |
-| `queue_size` | int | `1000` | Max buffered records before dropping |
-
-### `LokiClient(url, labels, timeout)`
-
-Reusable client instance — useful when you need multiple clients for different services.
+Reusable client. Defaults for `url` / `basic_auth` match `configure`. Host may be a Loki base URL or full `…/loki/api/v1/push`.
 
 ```python
 from tb_loki_central_logger import LokiClient
 
-client = LokiClient("http://loki:3100", labels={"service": "worker"})
+client = LokiClient(labels={"service": "worker"})
 client.push("Job started")
 client.push_batch([("Step 1", "info"), ("Step 2", "info")])
 ```
+
+### `LokiHandler(url=None, labels=None, timeout=5, queue_size=1000, basic_auth=None)`
+
+`logging.Handler` that enqueues records and sends them on a **daemon thread** (non-blocking `emit`). Call `handler.close()` before exit to flush and stop the worker.
+
+| Parameter     | Default / source | Description |
+|---------------|------------------|-------------|
+| `url`         | `GRAFANA_CLOUD_URL` / package default | Loki host or push URL |
+| `labels`      | `{}` | Static labels on every record |
+| `timeout`     | `5` | HTTP timeout (seconds) |
+| `queue_size`  | `1000` | Queue capacity; new records dropped when full |
+| `basic_auth`  | `GRAFANA_CLOUD_USER` + write token from env | `(username, token)` tuple |
 
 ---
 
 ## Log levels
 
-Pass any string as `level`. Recommended values that map to Loki label conventions:
+**`LokiHandler`** maps Python’s `LogRecord.levelname` to Loki label values: `DEBUG`→`debug`, `INFO`→`info`, `WARNING`→`warn`, `ERROR`→`error`, `CRITICAL`→`critical`.
 
-| Value | Use for |
-|-------|---------|
-| `debug` | Verbose internal state |
-| `info` | Normal events (default) |
-| `warn` | Unexpected but recoverable |
-| `error` | Failures needing attention |
-| `critical` | System-level failures |
+For **`push` / `push_log` / `push_logs`**, you pass the string yourself; common choices: `debug`, `info`, `warn`, `error`, `critical`.
 
 ---
 
 ## Publish to PyPI
 
-**One-time setup**
+### CI (this repo)
 
-1. Create accounts on [pypi.org](https://pypi.org/account/register/) and (optional) [test.pypi.org](https://test.pypi.org/account/register/).
-2. Under **Account settings → API tokens**, create a token scoped to the whole account or to the **`tb-loki-central-logger`** project (after the first upload).
-3. When **twine** prompts for credentials, username is `__token__` and the password is the token value (including the `pypi-` prefix).
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml): pushes to **TestPyPI** on `feature/**` and **PyPI** on `main`, using repository secrets `TEST_PYPI_API_TOKEN` and `PYPI_API_TOKEN` (user `__token__`). Bump **`version`** in `pyproject.toml` (and `__version__` in `__init__.py` if you keep them aligned) before each release — indexes reject re-uploading the same file.
 
-**Each release**
+### Manual release
 
 1. Bump **`version`** in `pyproject.toml`.
-2. Use a clean virtualenv (or your dev venv) with current tools:
-
-```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-3. Build source and wheel (artifacts go in **`dist/`**):
+2. Clean and build:
 
 ```bash
 rm -rf dist/ build/ *.egg-info
 python -m build
-```
-
-4. Check the artifacts:
-
-```bash
 twine check dist/*
 ```
 
-5. Upload to **TestPyPI** first (optional, recommended):
+3. Upload:
 
 ```bash
-twine upload --repository testpypi dist/*
+twine upload --repository testpypi dist/*    # optional dry-run on Test PyPI
+twine upload dist/*                          # production PyPI
 ```
 
-Verify: `pip install -i https://test.pypi.org/simple/ tb-loki-central-logger==<your-version>`
-
-6. Upload to **PyPI**:
-
-```bash
-twine upload dist/*
-```
-
-After a few minutes: `pip install tb-loki-central-logger`
-
-**Notes**
-
-- Do not commit **`dist/`** or `*.egg-info/`; keep them in `.gitignore`.
-- For automated publishing, use [trusted publishing](https://docs.pypi.org/trusted-publishers/) from GitHub Actions instead of storing tokens in CI secrets where possible.
+Keep `dist/` and `*.egg-info/` out of git (see `.gitignore`). For OIDC instead of tokens, configure [trusted publishing](https://docs.pypi.org/trusted-publishers/) and drop password-based auth from the workflow.
 
 ---
 
-## Local development install
+## Editable local install
 
 ```bash
-git clone https://github.com/your-org/tb-loki-central-logger
-cd tb-loki-central-logger
+python -m venv .venv && source .venv/bin/activate
 pip install -e .
-python hello_world_test.py
+python test.py
 ```
-
-## get 
-
-https://grafana.com/orgs/taixingbi/hosted-logs/1529533
-
-loki.write "grafanacloud" {
-  endpoint {
-    url = "https://logs-prod-036.grafana.net/loki/api/v1/push"
-    basic_auth {
-      username = "1529533"
-      password = "<Your Grafana.com API Token>"
-    }
-  }
-}
-
-
-<Your Grafana.com API Token> from Grafana-write
-https://grafana.com/orgs/taixingbi/access-policies
-
