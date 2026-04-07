@@ -48,6 +48,8 @@ Uses default client from **`configure`**, or lazily creates one.
 
 See README. Loki attaches when **`GRAFANA_CLOUD_API_KEY`** (or legacy write key) + user are set—unless `loki=False`.
 
+`setup_central_logging(..., formatter=my_formatter)` attaches the same **`logging.Formatter`** instance to stderr and **`LokiHandler`**; **`timezone`** and **`extra_json_fields`** are only used when **`formatter`** is omitted (default **`JsonLogFormatter`**).
+
 ---
 
 ## Log levels

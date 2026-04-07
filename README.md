@@ -105,7 +105,7 @@ Pass **`basic_auth=(user, token)`** and/or **`url=...`** into **`LokiClient`** /
 
 ## JSON logs on stderr + Loki: `setup_central_logging`
 
-Structured JSON to stderr and a **`LokiHandler`** when credentials are present. Use **`filters`** for custom context and **`extra_json_fields`** to list `LogRecord` attributes to include.
+Structured JSON to stderr and a **`LokiHandler`** when credentials are present. Use **`extra_json_fields`** to add `LogRecord` attributes to the default **`JsonLogFormatter`**, **`filters`** for shared context, or **`formatter=`** to supply your own **`logging.Formatter`** (same instance is used for stderr and Loki).
 
 ```python
 from tb_loki_central_logger import setup_central_logging, shutdown_central_logging
@@ -119,6 +119,69 @@ loki = setup_central_logging(
 )
 
 shutdown_central_logging("myapp.api", loki)
+```
+
+### Custom formatter (fixed keys, `"-"` when missing)
+
+Use this when you want an exact JSON shape (for example HTTP context) instead of the built-in **`level`** / **`logger`** fields. **`timezone`** and **`extra_json_fields`** are ignored when **`formatter`** is set.
+
+```python
+import json
+import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from tb_loki_central_logger import setup_central_logging
+
+_EXTRA_JSON_FIELDS = ("latency_ms",)  # optional keys, only if present on the record
+
+
+class MyJsonFormatter(logging.Formatter):
+    """One JSON object per line for stderr and Loki."""
+
+    def __init__(self, *, timezone: str = "America/New_York"):
+        super().__init__()
+        self._tz = ZoneInfo(timezone)
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, object] = {
+            "ts": datetime.fromtimestamp(record.created, tz=self._tz).isoformat(),
+            "request_id": getattr(record, "request_id", "-"),
+            "session_id": getattr(record, "session_id", "-"),
+            "method": getattr(record, "method", "-"),
+            "path": getattr(record, "path", "-"),
+            "status": getattr(record, "status", "-"),
+            "message": record.getMessage(),
+            "error": self.formatException(record.exc_info) if record.exc_info else None,
+        }
+        for key in _EXTRA_JSON_FIELDS:
+            if hasattr(record, key):
+                payload[key] = getattr(record, key)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+setup_central_logging(
+    logger_name="app",
+    formatter=MyJsonFormatter(),
+    loki=False,  # True when GRAFANA_CLOUD_* is set
+)
+
+logging.getLogger("app").info(
+    "complete_rag_answer done k_used=5",
+    extra={
+        "request_id": "request_id_1",
+        "session_id": "session_id_1",
+        "method": "POST",
+        "path": "/v1/rag/query",
+        "status": "200",
+    },
+)
+```
+
+Example line on stderr (or Loki message body):
+
+```json
+{"ts": "2026-04-07T08:31:41.006403-04:00", "request_id": "request_id_1", "session_id": "session_id_1", "method": "POST", "path": "/v1/rag/query", "status": "200", "message": "complete_rag_answer done k_used=5", "error": null}
 ```
 
 ---

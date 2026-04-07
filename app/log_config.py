@@ -79,6 +79,7 @@ def setup_central_logging(
     load_dotenv_path: Path | None = None,
     timezone: str = "UTC",
     extra_json_fields: Sequence[str] = (),
+    formatter: Optional[logging.Formatter] = None,
     level: int = logging.INFO,
     filters: Sequence[logging.Filter] = (),
     stream: TextIO | None = None,
@@ -90,6 +91,12 @@ def setup_central_logging(
     env: str | None = None,
     version: str | None = None,
 ) -> LokiHandler | None:
+    """Wire stderr and optional Loki with a shared formatter.
+
+    If *formatter* is set, it is attached to both handlers; *timezone* and
+    *extra_json_fields* are ignored. Otherwise a :class:`JsonLogFormatter` is
+    built from those keyword arguments.
+    """
     from . import __version__ as pkg_version
 
     log = _resolve_logger(logger, logger_name)
@@ -111,7 +118,9 @@ def setup_central_logging(
     for f in filters:
         log.addFilter(f)
 
-    fmt = JsonLogFormatter(timezone=timezone, extra_fields=extra_json_fields)
+    fmt = formatter or JsonLogFormatter(
+        timezone=timezone, extra_fields=extra_json_fields
+    )
     if use_stderr:
         sh = logging.StreamHandler(stream or sys.stderr)
         sh.setLevel(level)

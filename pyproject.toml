@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tb-loki-central-logger"
-version = "0.2.1"
+version = "0.2.2"
 description = "Grafana Loki logging — async httpx only: LokiClient, push_log, LokiHandler."
 readme = "README.md"
 license = { text = "MIT" }
