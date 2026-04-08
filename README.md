@@ -105,7 +105,7 @@ Pass **`basic_auth=(user, token)`** and/or **`url=...`** into **`LokiClient`** /
 
 ## JSON logs on stderr + Loki: `setup_central_logging`
 
-Structured JSON to stderr and a **`LokiHandler`** when credentials are present. Use **`extra_json_fields`** to add `LogRecord` attributes to the default **`JsonLogFormatter`**, **`filters`** for shared context, or **`formatter=`** to supply your own **`logging.Formatter`** (same instance is used for stderr and Loki).
+Structured JSON to stderr and a **`LokiHandler`** when credentials are present. The default **`JsonLogFormatter`** emits keys in this order: **`ts`**, **`level`**, **`logger`**, **`request_id`**, **`session_id`**, **`method`**, **`path`**, **`status`** (HTTP-style context, **`"-"`** when not set on the record), **`message`**, **`error`**, then any attributes listed in **`extra_json_fields`** that are not among those fixed keys. Use **`filters`** for shared context, or **`formatter=`** for a fully custom formatter (same instance is used for stderr and Loki).
 
 ```python
 from tb_loki_central_logger import setup_central_logging, shutdown_central_logging
@@ -113,7 +113,7 @@ from tb_loki_central_logger import setup_central_logging, shutdown_central_loggi
 loki = setup_central_logging(
     "myapp.api",
     timezone="America/New_York",
-    extra_json_fields=("request_id", "method", "path", "status"),
+    extra_json_fields=("latency_ms",),  # optional tail fields; context keys above are always present
     service="my-service",
     component="api",
 )

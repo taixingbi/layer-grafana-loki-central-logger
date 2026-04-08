@@ -15,6 +15,12 @@ from zoneinfo import ZoneInfo
 from .config import basic_auth_from_env, load_dotenv
 from .handler import LokiHandler
 
+# JSON key order: ts → level → logger → request_* / HTTP context → message → error → other extras
+_JSON_CONTEXT_KEYS = ("request_id", "session_id", "method", "path", "status")
+_JSON_FIXED_KEYS = frozenset(
+    {"ts", "level", "logger", *_JSON_CONTEXT_KEYS, "message", "error"}
+)
+
 
 def _resolve_logger(
     logger: logging.Logger | str | None, logger_name: str
@@ -63,10 +69,14 @@ class JsonLogFormatter(logging.Formatter):
             "ts": datetime.fromtimestamp(record.created, tz=self._tz).isoformat(),
             "level": record.levelname,
             "logger": record.name,
-            "message": record.getMessage(),
-            "error": err,
         }
+        for key in _JSON_CONTEXT_KEYS:
+            payload[key] = getattr(record, key, "-")
+        payload["message"] = record.getMessage()
+        payload["error"] = err
         for key in self._extras:
+            if key in _JSON_FIXED_KEYS:
+                continue
             if hasattr(record, key):
                 payload[key] = getattr(record, key)
         return json.dumps(payload, ensure_ascii=False)
