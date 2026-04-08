@@ -50,7 +50,7 @@ class JsonLogFormatter(logging.Formatter):
     def __init__(
         self,
         *,
-        timezone: str = "UTC",
+        timezone: str = "EST",
         extra_fields: Sequence[str] = (),
     ):
         super().__init__()
@@ -77,7 +77,7 @@ def setup_central_logging(
     *,
     logger_name: str = "app",
     load_dotenv_path: Path | None = None,
-    timezone: str = "UTC",
+    timezone: str = "EST",
     extra_json_fields: Sequence[str] = (),
     formatter: Optional[logging.Formatter] = None,
     level: int = logging.INFO,
